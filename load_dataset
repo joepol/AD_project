@@ -1,0 +1,32 @@
+import numpy as np
+train_all = np.load('img_array_train_6k_1.npy')
+for i in range(2,23):
+    train_cur = np.load('img_array_train_6k_%d.npy' %i)
+    train_all = np.vstack((train_all, train_cur))
+
+valid_all = np.load('img_array_valid_6k_1.npy')
+for i in range(2,6):
+    valid_cur = np.load('img_array_valid_6k_%d.npy' %i)
+    valid_all = np.vstack((valid_all, valid_cur))
+
+test_all = np.load('img_array_test_6k_1.npy')
+for i in range(2,6):
+    test_cur = np.load('img_array_test_6k_%d.npy' %i)
+    test_all = np.vstack((test_all, test_cur))
+
+import pandas as pd
+demo = pd.read_csv('adni_demographic_master_kaggle.csv')
+trX_subjs = demo[(demo['train_valid_test']==0)]
+trY = np.asarray(trX_subjs.diagnosis)
+vaX_subjs = demo[(demo['train_valid_test']==1)]
+vaY = np.asarray(vaX_subjs.diagnosis)
+trY_all = []
+for n in trY:
+    for i in range(62):
+        trY_all.append(n)
+trY_all = np.asarray(trY_all)
+vaY_all = []
+for n in vaY:
+    for i in range(62):
+        vaY_all.append(n)
+vaY_all = np.asarray(vaY_all)
