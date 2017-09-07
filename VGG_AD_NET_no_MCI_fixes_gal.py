@@ -35,7 +35,7 @@ def next_batch(num, data, labels):
 # #######################################
             #Loading dataset#
 # #######################################
-
+#
 
 #DIR = os.path.dirname(os.path.abspath(__file__))
 DIR = os.getcwd() + "/"
