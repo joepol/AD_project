@@ -10,8 +10,11 @@ from PIL import Image
 FLAGS = None
 def weight_variable(shape, weight_name):
     # generates random values for initial weights
-    initial = tf.truncated_normal(shape, stddev=0.1)
-    return tf.Variable(initial)
+    #initial = tf.truncated_normal(shape, stddev=0.1)
+    initializer = tf.get_variable(weight_name, shape,
+                    initializer=tf.contrib.layers.xavier_initializer())
+    #return tf.Variable(initializer)
+    return initializer;
 
 def bias_variable(shape, bias_name):
     initial = tf.constant(0.0, shape=shape)
@@ -40,7 +43,7 @@ def next_batch(num, data, labels):
 #DIR = os.path.dirname(os.path.abspath(__file__))
 DIR = os.getcwd() + "/"
 print("DIR folder is ", DIR)
-train_tmp = np.load('img_array_test_6k_1.npy')[:5952]
+train_tmp = np.load('../img_array_test_6k_1.npy')[:5952]
 # use the commands train_all.size or train_all.shape to get info
 # for i in range(2,23):
 #     train_cur = np.load('../img_array_train_6k_%d.npy' %i)
@@ -56,7 +59,7 @@ for i in range(train_tmp.shape[0]): #range(21*6000-1):
      if ((i%62)>19 and (i%62)<40):
         train_all.append(train_tmp[i])
 
-demo = pd.read_csv('adni_demographic_master_kaggle.csv')
+demo = pd.read_csv('../adni_demographic_master_kaggle.csv')
 # gets all the indices of 0 = train and puts all of their 
 # data in trX_subjs
 trX_subjs_train = demo[(demo['train_valid_test']==2)]
@@ -86,7 +89,7 @@ x_image=x
 
 
 ##### first convolutional later #####
-W_conv1 = weight_variable([5, 5 , 1, 32], "W_conv1") 
+W_conv1 = weight_variable([15,15 , 1, 32], "W_conv1")
 # 5X5 receptive field ,1 input channel, 32 feature maps
 b_conv1 = bias_variable([32], "b_conv1")
 #32 feature maps - bias
@@ -97,7 +100,7 @@ h_pool1 = max_pool_2x2(h_conv1,"first layer")
 # input: 96X96X32 -> max_pool -> 48X48X32
 
 ##### second convolutional layer #####
-W_conv2 = weight_variable([5, 5, 32, 64], "W_conv2")
+W_conv2 = weight_variable([15, 15, 32, 64], "W_conv2")
 # 5X5 receptive field ,32 input channel, 64 feature maps
 b_conv2 = bias_variable([64],"b_conv2")
 #64 feature maps - bias
@@ -147,24 +150,26 @@ b_fc2 = bias_variable([64],"b_fc2")
 h_fc2 = tf.nn.relu(tf.matmul(h_fc1, W_fc2) + b_fc2)
 
 # dropout
-keep_prob = tf.placeholder(tf.float32)
-h_fc_drop = tf.nn.dropout(h_fc2, keep_prob)
+#keep_prob = tf.placeholder(tf.float32)
+#h_fc_drop = tf.nn.dropout(h_fc2, keep_prob)
 
 # softmax
-W_fc3 = weight_variable([64, 2],"W_fc2")
-b_fc3 = bias_variable([2],"b_fc2")
+W_fc3 = weight_variable([64, 2],"W_fc3")
+b_fc3 = bias_variable([2],"b_fc3")
 
-y_conv = tf.nn.softmax(tf.matmul(h_fc_drop, W_fc3) + b_fc3)
+y_conv = tf.nn.softmax(tf.matmul(h_fc2, W_fc3) + b_fc3)
 
 print ("-----CNN architecture built-----")
 
-cross_entropy = tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(tf.clip_by_value(y_conv, 1e-10,1.0)), reduction_indices=[1]))
+#cross_entropy = tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(tf.clip_by_value(y_conv, 1e-10,1.0)), reduction_indices=[1]))
 #cross_entropy = tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(y_conv), reduction_indices=[1]))
+cross_entropy = tf.reduce_mean(
+      tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv))
 
 #tf.summary.scalar('cross_entropy', cross_entropy)
 
 
-train_step = tf.train.AdamOptimizer(1e-3).minimize(cross_entropy)
+train_step = tf.train.AdamOptimizer(1e-6).minimize(cross_entropy)
 # with tf.name_scope('train'):
 #     #train_step = tf.train.AdamOptimizer(FLAGS.learning_rate).minimize(cross_entropy)
 #train_step = tf.train.GradientDescentOptimizer(1e-3).minimize(cross_entropy)
@@ -186,9 +191,6 @@ accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 sess = tf.Session()
 #merged = tf.summary.merge_all()
 #train_writer = tf.summary.FileWriter(DIR,sess.graph)
-
-
-
 init = tf.global_variables_initializer()
 sess.run(init)
 
@@ -282,12 +284,12 @@ for train_iter in range(25000):
     print("train_iter number: ", train_iter)
     for i in range(batch_num):
         Xtr_train, Ytr_train = next_batch(batch_size, train_stack, train_lables)
-        sess.run(train_step, feed_dict={x:Xtr_train, y_:Ytr_train, keep_prob:0.5})
+        sess.run(train_step, feed_dict={x:Xtr_train, y_:Ytr_train}) # , keep_prob:0.5
         #sess.run(train_step, feed_dict={x:train_stack[batch_size*i:batch_size*i+(batch_size-1)], y_:train_lables[batch_size*i:batch_size*i+(batch_size-1)], keep_prob:0.5})
-        print("cross_entropy = ",sess.run(cross_entropy,feed_dict={x:Xtr_train, y_:Ytr_train, keep_prob:0.5}))
+        print("correct_prediction = ",sess.run(correct_prediction,feed_dict={x:Xtr_train, y_:Ytr_train})) # , keep_prob:0.5
         if i%50 == 0:
            # Xtr_validate, Ytr_validate = next_batch(50, validX_stack, validY_stack)
-            train_accuracy = sess.run(accuracy,feed_dict={x:Xtr_train, y_:Ytr_train, keep_prob:0.5})
+            train_accuracy = sess.run(accuracy,feed_dict={x:Xtr_train, y_:Ytr_train}) # , keep_prob:0.5
            # valid_accuracy = sess.run(accuracy,feed_dict={x:Xtr_validate, y_:Ytr_validate, keep_prob:0.5})
            #batch_valid_accuracy = batch_valid_accuracy + valid_accuracy*100
            #print("step %d, validation accuracy, %f" %(i,valid_accuracy*100))
@@ -304,6 +306,6 @@ for train_iter in range(25000):
 
 
 
-train_writer.close()
-test_writer.close()
+#train_writer.close()
+#test_writer.close()
 
