@@ -7,8 +7,10 @@ import sys
 import math
 from PIL import Image
 
+FLAGS = None
 def weight_variable(shape, weight_name):
     # generates random values for initial weights
+    #initial = tf.truncated_normal(shape, stddev=0.1)
     initializer = tf.get_variable(weight_name, shape,
                     initializer=tf.contrib.layers.xavier_initializer())
     #return tf.Variable(initializer)
@@ -32,18 +34,6 @@ def next_batch(num, data, labels):
     data_shuffle = [data[ i] for i in idx]
     labels_shuffle = [labels[ i] for i in idx]
     return np.asarray(data_shuffle), np.asarray(labels_shuffle)
-def variable_summaries(var):
-  """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
-  with tf.name_scope('summaries'):
-    mean = tf.reduce_mean(var)
-    tf.summary.scalar('mean', mean)
-    with tf.name_scope('stddev'):
-     stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-    tf.summary.scalar('stddev', stddev)
-    tf.summary.scalar('max', tf.reduce_max(var))
-    tf.summary.scalar('min', tf.reduce_min(var))
-    tf.summary.histogram('histogram', var)
-
 
 # #######################################
             #Loading dataset#
@@ -93,10 +83,9 @@ print ("-----loaded .npy files-----")
 # #######################################
             #Building network#
 # #######################################
-with tf.name_scope('input'):
-	x = tf.placeholder(tf.float32, shape=[None, 96 , 96, 1])
-	y_ = tf.placeholder(tf.float32, shape = [None, 3])		
-	x_image=x
+x = tf.placeholder(tf.float32, shape=[None, 96 , 96, 1])
+y_ = tf.placeholder(tf.float32, shape = [None, 3])		
+x_image=x
 
 
 ##### first convolutional later #####
@@ -104,9 +93,6 @@ W_conv1 = weight_variable([5, 5 , 1, 64], "W_conv1")
 # 5X5 receptive field ,1 input channel, 32 feature maps
 b_conv1 = bias_variable([64], "b_conv1")
 #32 feature maps - bias
-
-variable_summaries(W_conv1)
-variable_summaries(b_conv1)
 
 h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1,"first layer") + b_conv1)
 # 96X96X1 -> 0-padding -> 100X100X1 -> conv -> 96X96X32
@@ -146,8 +132,7 @@ h_conv4 = tf.nn.relu(conv2d(h_pool3, W_conv4,"fourth layer") + b_conv4)
 h_pool4 = max_pool_2x2(h_conv4,"fourth layer")
 # input is 12X12X128 ----> 6X6X128
 
-variable_summaries(h_conv4)
-variable_summaries(h_pool4)
+
 
 
 # first fully connected layer
@@ -174,33 +159,44 @@ b_fc3 = bias_variable([3],"b_fc3")       ####
 
 y_conv = tf.nn.softmax(tf.matmul(h_fc2, W_fc3) + b_fc3)
 
-variable_summaries(y_conv)
-
 print ("-----CNN architecture built-----")
 
 #cross_entropy = tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(tf.clip_by_value(y_conv, 1e-10,1.0)), reduction_indices=[1]))
 #cross_entropy = tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(y_conv), reduction_indices=[1]))
+cross_entropy = tf.reduce_mean(
+      tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv))
+tf.summary.scalar('cross_entropy', cross_entropy)
+#tf.summary.scalar('cross_entropy', cross_entropy)
 
-with tf.name_scope('accuracy'):
-	with tf.name_scope('correct_prediction'):
-		correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
-	with tf.name_scope('accuracy'):
-		accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-tf.summary.scalar('accuracy', accuracy)
-
-with tf.name_scope('total'):
-	cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv))
-	tf.summary.scalar('cross_entropy', cross_entropy)
 
 train_step = tf.train.AdamOptimizer(1e-6).minimize(cross_entropy)
+# with tf.name_scope('train'):
+#     #train_step = tf.train.AdamOptimizer(FLAGS.learning_rate).minimize(cross_entropy)
+#train_step = tf.train.GradientDescentOptimizer(1e-3).minimize(cross_entropy)
+
+#with tf.name_scope('accuracy'):
+#    with tf.name_scope('correct_prediction'):
+correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
+#    with tf.name_scope('accuracy'):
+accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+tf.summary.scalar('accuracy', accuracy)
+ #   tf.summary.scalar('accuracy', accuracy)
+
+
+##correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_,1))
+# when the y_conv is equal to given y_ then correct_prediction==1
+# when the y_conv prediction is wrong, correct_prediction==1
+##accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 # we want to minimize the ~accuracy~ parameter, when it is zero - all predictions are correct
 ##saver = tf.train.Saver()
-sess = tf.Session()
 merged = tf.summary.merge_all()
-train_writer = tf.summary.FileWriter(DIR,sess.graph)
+sess = tf.Session()
+train_writer = tf.summary.FileWriter(DIR+ '/train',sess.graph)
+valid_writer = tf.summary.FileWriter(DIR+ '/valid')
 init = tf.global_variables_initializer()
 sess.run(init)
 
+#tf.global_variables_initializer().run()
 print ("started session")
 
 
@@ -281,29 +277,32 @@ print("len(train_all)/batch_size) is " ,math.floor(len(train_all)/batch_size))
 
 batch_num = int(math.floor(len(train_all)/batch_size))
 for train_iter in range(25000):
-	print("train_iter number: ", train_iter)
-	for i in range(batch_num):
-		Xtr_train, Ytr_train = next_batch(batch_size, train_stack, train_lables)
-		run_metadata = tf.RunMetadata()
-		summary,_ = sess.run([merged,train_step], feed_dict={x:Xtr_train, y_:Ytr_train})
-		train_writer.add_run_metadata(run_metadata, 'step%03d' % i)
-		train_writer.add_summary(summary, i)
-# , keep_prob:0.5
+    print("train_iter number: ", train_iter)
+    for i in range(batch_num):
+        Xtr_train, Ytr_train = next_batch(batch_size, train_stack, train_lables)
+        sess.run(train_step, feed_dict={x:Xtr_train, y_:Ytr_train}) # , keep_prob:0.5
         #sess.run(train_step, feed_dict={x:train_stack[batch_size*i:batch_size*i+(batch_size-1)], y_:train_lables[batch_size*i:batch_size*i+(batch_size-1)], keep_prob:0.5})
-	if i%50 == 0:
+        if i%50 == 0:
             Xtr_validate, Ytr_validate = next_batch(batch_size, validX_stack, validY_stack)
+            run_metadata = tf.RunMetadata()
+            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+            train_summary, _ = sess.run([merged, train_step], feed_dict={x:Xtr_train, y_:Ytr_train},options=run_options,run_metadata=run_metadata)
+            train_writer.add_run_metadata(run_metadata, 'step%03d' %(train_iter+batch_num+i))
+            train_writer.add_summary(train_summary, (train_iter+batch_num+i))
             train_accuracy = sess.run(accuracy,feed_dict={x:Xtr_train, y_:Ytr_train}) # , keep_prob:0.5
-            valid_accuracy = sess.run(accuracy,feed_dict={x:Xtr_validate, y_:Ytr_validate})
-           #batch_valid_accuracy = batch_valid_accuracy + valid_accuracy*100
-           #print("step %d, validation accuracy, %f" %(i,valid_accuracy*100))
             print("step %d,train accuracy, %f" %(i,train_accuracy*100))
-            #print("correct_prediction = ",sess.run(correct_prediction,feed_dict={x:Xtr_train, y_:Ytr_train})) 
-            print("step %d,valid accuracy, %f" %(i,valid_accuracy*100))
             print(" ")
             print("cross_entropy = ",sess.run(cross_entropy,feed_dict={x:Xtr_train, y_:Ytr_train})) # , keep_prob:0.5
             print(" ")
-    #print("iteration valid accuracy: %f" %(batch_valid_accuracy/(51)))
-	batch_valid_accuracy = 0
+        if (i%51 == 0) and (i%50 != 0):
+            valid_summary, valid_accuracy = sess.run([merged,accuracy],feed_dict={x:Xtr_validate, y_:Ytr_validate})
+            #valid_writer.add_run_metadata(run_metadata, 'step%03d' %(train_iter+batch_num+i))
+            valid_writer.add_summary(valid_summary,(train_iter+batch_num+i))
+            batch_valid_accuracy = batch_valid_accuracy + valid_accuracy*100
+           #print("step %d, validation accuracy, %f" %(i,valid_accuracy*100))
+            print("step %d,valid accuracy, %f" %(i,valid_accuracy*100))
+    print("iteration valid accuracy: %f" %(batch_valid_accuracy/(51)))
+    batch_valid_accuracy = 0
     #summary, _ = sess.run([merged, train_step], feed_dict={x:Xtr_train, y_:Ytr_train, keep_prob:0.5})
     #train_writer.add_summary(summary, i)
     ##a = saver.save(sess, DIR+"mode.ckpt")
@@ -311,9 +310,9 @@ for train_iter in range(25000):
     ##print("saved session weights to file")
 
 
+
+
+
 train_writer.close()
-
-
-#train_writer.close()
-#test_writer.close()
+valid_writer.close()
 
