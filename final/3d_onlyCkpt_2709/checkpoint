@@ -1,0 +1,2 @@
+model_checkpoint_path: "/home/cudau/Documents/AD_project/270917/3d_tb_270917_mode.ckpt"
+all_model_checkpoint_paths: "/home/cudau/Documents/AD_project/270917/3d_tb_270917_mode.ckpt"
