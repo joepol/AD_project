@@ -1,0 +1,2 @@
+model_checkpoint_path: "/home/cuser/Documents/Do_not_Delete/script_tensor/mode.ckpt"
+all_model_checkpoint_paths: "/home/cuser/Documents/Do_not_Delete/script_tensor/mode.ckpt"
